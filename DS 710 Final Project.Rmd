@@ -1,0 +1,276 @@
+---
+title: "DS 710 Final Project"
+author: "Patrick Christ"
+date: "12/16/2020"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Load in Libraries and Data from csvs
+
+```{r}
+library(ggformula)
+library(dplyr)
+```
+
+```{r}
+#Load in our data to a few different data frames
+pre_df = read.csv("PrePatchTweets.csv")
+post_df = read.csv("PostPatchTweets.csv")
+ffxiv_tweets_df = read.csv("FFXIVTweets.csv")
+```
+
+## Preliminary Look at Data
+```{r}
+#Look at the distribution of my data
+hist(pre_df$Polarity)
+hist(post_df$Polarity)
+hist(pre_df$Subjectivity)
+hist(post_df$Subjectivity)
+```
+
+```{r}
+#It does not look normally distributed, so I want to look at a transformation.
+hist(log10(pre_df$Polarity))
+hist(log10(post_df$Polarity))
+```
+
+```{r}
+#Also check boxplots
+boxplot(pre_df$Polarity)
+boxplot(post_df$Polarity)
+```
+```{r}
+#Let's just try a test real quick to see if my initial hypothesis is correct
+#without any manipulation
+
+#no normality so we need to use wilcox
+wilcox.test(post_df$Polarity[1:6098], 
+            pre_df$Polarity[1:6098], 
+            alternative = "greater", 
+            paired = TRUE)
+# Wilcoxon signed rank test with continuity correction
+#
+#data:  post_df$Polarity[1:6098] and pre_df$Polarity[1:6098]
+#V = 5565868, p-value = 0.9923
+#alternative hypothesis: true location shift is greater than 0
+```
+```{r}
+#Interesting, so my alternative hypothesis is not true and in fact
+#might be the opposite...let's check
+wilcox.test(post_df$Polarity[1:6098], 
+            pre_df$Polarity[1:6098], 
+            alternative = "less", 
+            paired = TRUE)
+
+# Wilcoxon signed rank test with continuity correction
+#
+#data:  post_df$Polarity[1:6098] and pre_df$Polarity[1:6098]
+#V = 5566281, p-value = 0.007785
+#alternative hypothesis: true location shift is less than 0
+
+```
+## Data Manipulation
+
+```{r}
+#It looks like a polarity of 0 is skewing the data. I'm not sure if that is
+#real data or bad data caused by TextBlob (or some mix of the two).
+
+ffxiv_tweets_df %>%
+  group_by(Patch_Timing) %>%
+  filter(Polarity != 0) %>%
+  summarise(
+    n = n()
+  )
+```
+
+```{r}
+#It looks like we have a lot of tweets where there is no polarity. I find 
+#this odd, so I also want to look at tweets above 0 and below 0 in both
+#timeframes
+no_downtime <- ffxiv_tweets_df %>%
+  filter(Patch_Timing == "Before" | Patch_Timing == "After")
+
+no_downtime_pos <- no_downtime %>%
+  filter(Polarity > 0)
+
+no_downtime_neg <- no_downtime %>%
+  filter(Polarity < 0)
+
+no_downtime_neg_before <- no_downtime_neg %>%
+  filter(Patch_Timing == "Before")
+
+no_downtime_neg_after <- no_downtime_neg %>%
+  filter(Patch_Timing == "After")
+
+no_downtime_pos_before <- no_downtime_pos %>%
+  filter(Patch_Timing == "Before")
+
+no_downtime_pos_after <- no_downtime_pos %>%
+  filter(Patch_Timing == "After")
+```
+
+
+```{r}
+#Checking to see if a transformation would help my data
+no_downtime_pos %>%
+  gf_histogram(~Polarity) %>%
+  gf_facet_grid(Patch_Timing ~ .)
+
+no_downtime_pos %>%
+  gf_histogram(~Polarity) %>%
+  gf_facet_grid(Patch_Timing ~ .) %>%
+  gf_refine(scale_y_log10())
+
+no_downtime_neg %>%
+  gf_histogram(~Polarity) %>%
+  gf_facet_grid(Patch_Timing ~ .)
+
+no_downtime_neg %>%
+  gf_histogram(~Polarity) %>%
+  gf_facet_grid(Patch_Timing ~ .) %>%
+  gf_refine(scale_y_log10())
+```
+
+```{r}
+#That data doesn't look like it follows a normal distribution either, which
+#means we'll use another wilcox test
+
+#x is to the right of y = no
+#"Before the patch, negative reviews were closer to 0"
+wilcox.test(no_downtime_neg_before$Polarity[1:561],
+            no_downtime_neg_after$Polarity[1:561],
+            alternative = "greater",
+            paired = TRUE)
+
+##Wilcoxon signed rank test with continuity correction
+#
+#data:  no_downtime_neg_before$Polarity[1:561] and no_downtime_neg_after$Polarity[1:561]
+#V = 82113, p-value = 0.0521
+#alternative hypothesis: true location shift is greater than 0
+```
+```{r}
+# x is to the left of y = yes
+#"Before the patch, positive reviews were closer to 0"
+wilcox.test(no_downtime_pos_before$Polarity[1:2590],
+            no_downtime_pos_after$Polarity[1:2590],
+            alternative = "less",
+            paired = TRUE)
+
+##Wilcoxon signed rank test with continuity correction
+#
+#data:  no_downtime_pos_before$Polarity[1:2590] and no_downtime_pos_after$Polarity[1:2590]
+#V = 1452972, p-value = 3.27e-05
+#alternative hypothesis: true location shift is less than 0
+```
+## Looking at some other variables for fun
+
+```{r}
+#Find a count of tweets with Photos in them by group around the patch
+media_tweets <- no_downtime %>%
+  group_by(Patch_Timing) %>%
+  count(Media)
+``` 
+
+
+## Graphs!
+
+```{r}
+#Graph Tweets with photos in ascending order
+media_tweets %>%
+  ungroup(Patch_Timing) %>%
+  filter(Media == "photo") %>%
+  mutate(Patch_Timing = reorder(Patch_Timing,n)) %>%
+  gf_col(n~Patch_Timing, color = "black", fill = "#1fd6e3") %>%
+  gf_labs(title = "Tweets With Photos Around Patch 5.4",
+          y = "Number of Tweets",
+          x = "Tweet Timing")
+
+#This comparison might have made a little more sense to use percentages rather
+#than a strict count, since the tweet count was slightly different, but
+#this wasn't really a variable of interest to my question so I have not 
+#omitted that for this project
+```
+```{r}
+#Graph a spread of polarity
+#I use width = 0 to on position_dodge to make comparison simpler,
+#and to make the graph less cluttered
+no_downtime %>%
+  gf_histogram(~Polarity, 
+               color = "black", 
+               fill =~ Patch_Timing, 
+               position=position_dodge(width=0)) %>%
+  gf_refine(scale_y_log10(),
+            scale_fill_manual(values = c("#ffe818","#384fff"))) %>%
+  gf_labs(title = "Sentiment of Tweets Around Patch 5.4",
+          fill = "Patch 5.4 Timing",
+          y = "Number of Tweets",
+          x = "Polarity (>0 is positive)")
+```
+```{r}
+#Boxplot of polarities
+no_downtime %>%
+  gf_boxplot(Polarity~Patch_Timing, 
+             color = "black",
+             fill = "#9e71d1") %>%
+  gf_labs(title = "Boxplot of Tweet Polarity Around Patch 5.4",
+          x= "Patch 5.4 Timing")
+```
+```{r}
+#So many 0's plot
+no_downtime %>%
+  gf_histogram(~Polarity, color = "black", fill = "orange") %>%
+  gf_labs(title = "Distribution of Polarity",
+          y = "Number of Tweets")
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
