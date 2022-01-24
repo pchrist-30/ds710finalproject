@@ -1,5 +1,10 @@
-<img src="https://datasciencedegree.wisconsin.edu/wp-content/themes/data-gulp/images/logo.svg" width="300">
+# Final Project, Data Science 710
 
-# Final Project, Data Science 710 
+Using tweets from Twitter, I analyzed sentiment before and after a patch to the popular MMO Final Fantasy XIV. 
+Python code and R code used for the analysis can be found above.
+Files as they were created by code and used are also included if you'd like to do your own analysis.
+For original instructions, see Final Project.docx
+To see my final executed code, refer to Final Project.pdf
+The executive summary is also included and labeled.
 
-Submit your final project via a pull request to this repository.  You'll find a detailed description in Final Project.docx.
+Woo!
